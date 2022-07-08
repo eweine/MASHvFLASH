@@ -49,11 +49,22 @@ mashy_flash <- function(mash_data, ...) {
   fl <- flashier::flash(
     data = mash_data$Bhat,
     S = mash_data$Shat,
-    var.type = NULL,
     ...
   )
 
-  fl[['lfsr']] <- flash_lfsr(fl)
+  optional_args <- list(...)
+  fit_E <- TRUE
+  if ('var.type' %in% names(optional_args)) {
+
+    if(is.null(optional_args$var.type)) {
+
+      fit_E <- FALSE
+
+    }
+
+  }
+
+  fl[['lfsr']] <- flash_lfsr(fl, fit_E)
   return(fl)
 
 }
@@ -61,17 +72,47 @@ mashy_flash <- function(mash_data, ...) {
 #' Get Local False Sign Rate (lfsr) for Flash Model
 #'
 #' @param fl A \code{flash} object.
+#' @param fit_E Boolean indicating if E was fit in the flash model. This is
+#' equivalent to \code{var.type = NULL} in \code{flashier::flash}.
+#' @param nsamp Number of samples to use to calculate lfsr.
 #'
 #' @return A matrix with the lfsr for each element of the data matrix.
 #' @export
 #'
 #' @examples
-flash_lfsr <- function(fl, nsamp = 1000) {
+flash_lfsr <- function(fl, fit_E, nsamp = 5000) {
 
   n <- nrow(fl$flash.fit$Y)
   p <- ncol(fl$flash.fit$Y)
 
   fx_samp <- flash_sample_fx(fl, nsamp)
+
+  if (fit_E) {
+
+    cat("Generating Posterior Samples for lfsr...\n")
+    pb <- txtProgressBar(min = 0, max = nsamp, initial = 0, style = 3)
+    # sample from posterior of E | LF'
+    for (i in 1:nsamp) {
+
+      setTxtProgressBar(pb, i)
+      resid <- fl$flash.fit$Y - fx_samp[[i]]
+      E_mean_mat <- resid * (1 / fl$flash.fit$given.S2)
+      E_sd_mat <- sqrt(1 / (1 / fl$flash.fit$given.S2 + fl$flash.fit$tau))
+      E_samp <- matrix(
+        data = rnorm(
+          n = n * p, mean = as.vector(E_mean_mat), sd = as.vector(E_sd_mat)
+        ),
+        nrow = n,
+        ncol = p
+      )
+
+      fx_samp[[i]] <- fx_samp[[i]] + E_samp
+
+    }
+    close(pb)
+
+  }
+
   pos_samp <- lapply(fx_samp, function(x) {x > 0})
   neg_samp <- lapply(fx_samp, function(x) {x < 0})
 
@@ -93,7 +134,7 @@ flash_lfsr <- function(fl, nsamp = 1000) {
 #' @param mash_data output of \code{mashr::mash_set_data}
 #' @param nsamp number of samples to draw
 #'
-#' @return list of sampels
+#' @return list of samples
 #' @export
 #'
 #' Note that this sampler is only valid if the error matrix E is not estimated
@@ -115,6 +156,48 @@ flash_posterior_pred_sample <- function(
   )
 
   post_pred_samp <- mapply("+", fx_samp, noise_samp, SIMPLIFY = FALSE)
+  return(post_pred_samp)
+
+}
+
+#' Sample from the posterior predictive distribution of a mash object.
+#'
+#' @param m mash object. The mash object must contain samples
+#' @param mash_data output of \code{mashr::mash_set_data}
+#' @param nsamp number of samples. Must match number of samples in mash object.
+#'
+#' @return list of samples
+#' @export
+#'
+#'
+#' @examples
+mash_posterior_pred_sample <- function(
+  m,
+  mash_data,
+  nsamp
+) {
+
+  fx_samp <- mashr::get_samples(m)
+  if (is.null(fx_samp)) {
+
+    stop("the mash object contains no samples")
+
+  }
+
+  samples_list <- list()
+  for(i in c(1:nsamp)) {
+
+    samples_list[[i]] <- fx_samp[,,glue::glue("sample_{i}")]
+
+  }
+
+  noise_samp <- replicate(
+    n = nsamp,
+    expr = apply(mash_data$Shat, MARGIN = c(1, 2), FUN = rnorm, n = 1, mean = 0),
+    simplify = FALSE
+  )
+
+  post_pred_samp <- mapply("+", samples_list, noise_samp, SIMPLIFY = FALSE)
   return(post_pred_samp)
 
 }
@@ -169,6 +252,7 @@ matrix_posterior_predictive_test <- function(
 
 }
 
+# code to test functions above
 
 # Generate 10 x 500 matrix with rank 3.
 n <- 25
@@ -187,11 +271,11 @@ Y <- X + matrix(rnorm(n * p, 0, 1), n, p)
 mash_data <- mashr::mash_set_data(Y)
 fl <- mashy_flash(mash_data, backfit = TRUE, greedy.Kmax = 5)
 
-fl_pp_samp <- flash_posterior_pred_sample(fl, mash_data, 100)
-
-p_val <- matrix_posterior_predictive_test(Y, fl_pp_samp)
-
-U <- mashr::cov_canonical(mash_data)
-
-m <- mashr::mash(mash_data, U, outputlevel = 4)
+# fl_pp_samp <- flash_posterior_pred_sample(fl, mash_data, 100)
+#
+# p_val <- matrix_posterior_predictive_test(Y, fl_pp_samp)
+#
+# U <- mashr::cov_canonical(mash_data)
+#
+# m <- mashr::mash(mash_data, U, outputlevel = 4)
 
