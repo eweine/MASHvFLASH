@@ -14,6 +14,93 @@ flash_sample_fx <- function(flash, nsamp) {
 
 }
 
+#' Get posterior mean of E from flash model
+#'
+#' @param fl A \code{flash} object.
+#' @param fit_E Boolean indicating if E was fit in the flash model. This is
+#' equivalent to \code{var.type = NULL} in \code{flashier::flash}.
+#'
+#' @return
+#' @export
+#'
+#' @examples
+flash_get_E_pm <- function(fl, fit_E) {
+
+  if (!fit_E) {
+
+    return(
+      matrix(data = 0, nrow = nrow(fl$flash.fit$Y), ncol = ncol(fl$flash.fit$Y))
+    )
+
+  } else {
+
+    resid <- fl$flash.fit$Y - fl$L.pm %*% t(fl$F.pm)
+    E_pm <- resid * (1 / fl$flash.fit$given.S2)
+    return(E_pm)
+
+  }
+
+}
+
+#' Get Local False Sign Rate (lfsr) for Flash Model
+#'
+#' @param fl A \code{flash} object.
+#' @param fit_E Boolean indicating if E was fit in the flash model. This is
+#' equivalent to \code{var.type = NULL} in \code{flashier::flash}.
+#' @param nsamp Number of samples to use to calculate lfsr.
+#'
+#' @return A matrix with the lfsr for each element of the data matrix.
+#' @export
+#'
+#' @examples
+flash_lfsr_LF_E <- function(fl, fit_E, nsamp = 5000) {
+
+  n <- nrow(fl$flash.fit$Y)
+  p <- ncol(fl$flash.fit$Y)
+
+  fx_samp <- flash_sample_fx(fl, nsamp)
+
+  if (fit_E) {
+
+    cat("Generating Posterior Samples for lfsr...\n")
+    pb <- txtProgressBar(min = 0, max = nsamp, initial = 0, style = 3)
+    # sample from posterior of E | LF'
+    for (i in 1:nsamp) {
+
+      setTxtProgressBar(pb, i)
+      resid <- fl$flash.fit$Y - fx_samp[[i]]
+      E_mean_mat <- resid * (1 / fl$flash.fit$given.S2)
+      E_sd_mat <- sqrt(1 / (1 / fl$flash.fit$given.S2 + fl$flash.fit$tau))
+      E_samp <- matrix(
+        data = rnorm(
+          n = n * p, mean = as.vector(E_mean_mat), sd = as.vector(E_sd_mat)
+        ),
+        nrow = n,
+        ncol = p
+      )
+
+      fx_samp[[i]] <- fx_samp[[i]] + E_samp
+
+    }
+    close(pb)
+
+  }
+
+  pos_samp <- lapply(fx_samp, function(x) {x > 0})
+  neg_samp <- lapply(fx_samp, function(x) {x < 0})
+
+  num_pos <- Reduce('+', pos_samp)
+  num_neg <- Reduce('+', neg_samp)
+  num_zero <- matrix(data = nsamp, nrow = n, ncol = p) - num_pos - num_neg
+
+  lfsr_neg <- (num_pos + num_zero) / nsamp
+  lfsr_pos <- (num_neg + num_zero) / nsamp
+
+  lfsr <- pmin(lfsr_neg, lfsr_pos)
+  return(lfsr)
+
+}
+
 #' Run Flash with mash data object
 #'
 #' @param mash_data Output from \code{mashr::mash_set_data}.
@@ -64,218 +151,30 @@ mashy_flash <- function(mash_data, ...) {
 
   }
 
-  fl[['lfsr']] <- flash_lfsr(fl, fit_E)
+  fl[['LF_E.lfsr']] <- flash_lfsr_LF_E(fl, fit_E)
+  fl[['E.pm']] <- flash_get_E_pm(fl, fit_E)
   return(fl)
 
 }
 
-#' Get Local False Sign Rate (lfsr) for Flash Model
+#' Fit Mash and Flash models
 #'
-#' @param fl A \code{flash} object.
-#' @param fit_E Boolean indicating if E was fit in the flash model. This is
-#' equivalent to \code{var.type = NULL} in \code{flashier::flash}.
-#' @param nsamp Number of samples to use to calculate lfsr.
+#' @param mash_data Output from \code{mashr::mash_set_data}.
+#' @param mash_params List of parameters to be passed to
+#' \code{mashr::mash}
+#' @param flash_params List of parameters to be passed to
+#' \code{flashier::flash}.
 #'
-#' @return A matrix with the lfsr for each element of the data matrix.
+#' @return
 #' @export
 #'
 #' @examples
-flash_lfsr <- function(fl, fit_E, nsamp = 5000) {
+fit_multivariate_models <- function(mash_data, mash_params, flash_params) {
 
-  n <- nrow(fl$flash.fit$Y)
-  p <- ncol(fl$flash.fit$Y)
-
-  fx_samp <- flash_sample_fx(fl, nsamp)
-
-  if (fit_E) {
-
-    cat("Generating Posterior Samples for lfsr...\n")
-    pb <- txtProgressBar(min = 0, max = nsamp, initial = 0, style = 3)
-    # sample from posterior of E | LF'
-    for (i in 1:nsamp) {
-
-      setTxtProgressBar(pb, i)
-      resid <- fl$flash.fit$Y - fx_samp[[i]]
-      E_mean_mat <- resid * (1 / fl$flash.fit$given.S2)
-      E_sd_mat <- sqrt(1 / (1 / fl$flash.fit$given.S2 + fl$flash.fit$tau))
-      E_samp <- matrix(
-        data = rnorm(
-          n = n * p, mean = as.vector(E_mean_mat), sd = as.vector(E_sd_mat)
-        ),
-        nrow = n,
-        ncol = p
-      )
-
-      fx_samp[[i]] <- fx_samp[[i]] + E_samp
-
-    }
-    close(pb)
-
-  }
-
-  pos_samp <- lapply(fx_samp, function(x) {x > 0})
-  neg_samp <- lapply(fx_samp, function(x) {x < 0})
-
-  num_pos <- Reduce('+', pos_samp)
-  num_neg <- Reduce('+', neg_samp)
-  num_zero <- matrix(data = nsamp, nrow = n, ncol = p) - num_pos - num_neg
-
-  lfsr_neg <- (num_pos + num_zero) / nsamp
-  lfsr_pos <- (num_neg + num_zero) / nsamp
-
-  lfsr <- pmin(lfsr_neg, lfsr_pos)
-  return(lfsr)
+  fit_list <- list()
+  fit_list['flash'] <- do.call(mashy_flash, flash_params)
+  fit_list['mash'] <- do.call(mashr::mash, mash_params)
+  return(fit_list)
 
 }
-
-#' Sample from the posterior predictive distribution of a flash object.
-#'
-#' @param fl flash object
-#' @param mash_data output of \code{mashr::mash_set_data}
-#' @param nsamp number of samples to draw
-#'
-#' @return list of samples
-#' @export
-#'
-#' Note that this sampler is only valid if the error matrix E is not estimated
-#' in the flash object. Future versions of the code could take that into account
-#' as well.
-#'
-#' @examples
-flash_posterior_pred_sample <- function(
-  fl,
-  mash_data,
-  nsamp
-) {
-
-  fx_samp <- flash_sample_fx(fl, nsamp)
-  noise_samp <- replicate(
-    n = nsamp,
-    expr = apply(mash_data$Shat, MARGIN = c(1, 2), FUN = rnorm, n = 1, mean = 0),
-    simplify = FALSE
-  )
-
-  post_pred_samp <- mapply("+", fx_samp, noise_samp, SIMPLIFY = FALSE)
-  return(post_pred_samp)
-
-}
-
-#' Sample from the posterior predictive distribution of a mash object.
-#'
-#' @param m mash object. The mash object must contain samples
-#' @param mash_data output of \code{mashr::mash_set_data}
-#' @param nsamp number of samples. Must match number of samples in mash object.
-#'
-#' @return list of samples
-#' @export
-#'
-#'
-#' @examples
-mash_posterior_pred_sample <- function(
-  m,
-  mash_data,
-  nsamp
-) {
-
-  fx_samp <- mashr::get_samples(m)
-  if (is.null(fx_samp)) {
-
-    stop("the mash object contains no samples")
-
-  }
-
-  samples_list <- list()
-  for(i in c(1:nsamp)) {
-
-    samples_list[[i]] <- fx_samp[,,glue::glue("sample_{i}")]
-
-  }
-
-  noise_samp <- replicate(
-    n = nsamp,
-    expr = apply(mash_data$Shat, MARGIN = c(1, 2), FUN = rnorm, n = 1, mean = 0),
-    simplify = FALSE
-  )
-
-  post_pred_samp <- mapply("+", samples_list, noise_samp, SIMPLIFY = FALSE)
-  return(post_pred_samp)
-
-}
-
-#' Compute a posterior predictive check on a sample from a multivariate model.
-#'
-#' @param data data matrix for which the model was fit
-#' @param sample posterior predictive sample from the model
-#' @param distance_norm norm to compute distance between matrices. See
-#' documentation of \code{norm} for more details.
-#'
-#' @return p-value of posterior predictive test
-#' @export
-#'
-#' @examples
-matrix_posterior_predictive_test <- function(
-  data,
-  sample,
-  distance_norm = c("O", "I", "F", "M", "2")
-) {
-
-  distance_norm <- match.arg(distance_norm)
-
-  nsamp <- length(sample)
-  samp_distance_vec <- numeric(as.integer(nsamp * (nsamp - 1) / 2))
-  data_distance_vec <- numeric(nsamp)
-  counter <- 0
-
-  for (i in 1:(nsamp - 1)) {
-
-    for (j in (i+1):nsamp) {
-
-      samp_norm <- norm(sample[[i]] - sample[[j]], type = distance_norm)
-      counter <- counter + 1
-      samp_distance_vec[counter] <- samp_norm
-
-    }
-
-    data_distance_vec[i] <- norm(sample[[i]] - data, type = distance_norm)
-
-  }
-
-  data_distance_vec[nsamp] <- norm(sample[[nsamp]] - data, type = distance_norm)
-
-  test_out <- wilcox.test(
-    x = data_distance_vec,
-    y = samp_distance_vec,
-    alternative = "greater"
-  )
-
-  return(test_out$p.val)
-
-}
-
-# code to test functions above
-
-# Generate 10 x 500 matrix with rank 3.
-n <- 25
-p <- 1000
-k <- 10
-A <- matrix(
-  data = rnorm(n = n * k, sd = 2), nrow = n, ncol = k
-)
-
-cov <- A %*% t(A) / (n - 1)
-
-X <- t(MASS::mvrnorm(n = p, mu = rep(0, n), Sigma = cov))
-Y <- X + matrix(rnorm(n * p, 0, 1), n, p)
-
-# set mash data
-mash_data <- mashr::mash_set_data(Y)
-fl <- mashy_flash(mash_data, backfit = TRUE, greedy.Kmax = 5)
-
-# fl_pp_samp <- flash_posterior_pred_sample(fl, mash_data, 100)
-#
-# p_val <- matrix_posterior_predictive_test(Y, fl_pp_samp)
-#
-# U <- mashr::cov_canonical(mash_data)
-#
-# m <- mashr::mash(mash_data, U, outputlevel = 4)
 
