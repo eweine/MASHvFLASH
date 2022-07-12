@@ -169,9 +169,11 @@ mashy_flash <- function(mash_data, ...) {
 #' @export
 #'
 #' @examples
-fit_multivariate_models <- function(mash_data, mash_params, flash_params) {
+fit_multivariate_models <- function(mash_data, mash_params = list(), flash_params = list()) {
 
   fit_list <- list()
+  mash_params['data'] <- mash_data
+  flash_params['mash_data'] <- mash_data
   fit_list['flash'] <- do.call(mashy_flash, flash_params)
   fit_list['mash'] <- do.call(mashr::mash, mash_params)
   return(fit_list)
