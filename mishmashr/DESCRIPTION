@@ -1,0 +1,21 @@
+Package: mishmashr
+Type: Package
+Title: A Unified Interface for Mash and Flash Models
+Version: 0.1.1
+Authors@R: c(
+    person("Eric", "Weine", email = "ericweine15@gmail.com", role = c("aut", "cre")))
+Description: Provides a unified interface for fitting mash and flash models. Also provides
+    expanded functionality for analyzing flash models.
+License: GPL-3
+Depends: 
+    R (>= 3.0.0)
+Encoding: UTF-8
+RoxygenNote: 7.1.2
+Imports: 
+    flashier (>= 0.2.32),
+    mashr (>= 0.2.57)
+Suggests:
+    MASS (>= 7.3-50)
+Collate: 
+    'mishmash.R'
+VignetteBuilder: knitr

@@ -1,0 +1,153 @@
+---
+title: "mishmashr: A Unified Interface for Fitting Mash and Flash Models"
+author: 
+  - Eric Weine^[University of Chicago, ericweine15@gmail.com]
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 4
+vignette: >
+  %\VignetteIndexEntry{mishmashr: A Unified Interface for Fitting Mash and Flash Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Mathematical Framework
+
+The creation of this package was inspired by the mathematical similarities between flash and mash models. Suppose $\hat{\beta}$ is an $n \times p$ matrix of observations. We assume the rows of $\hat{\beta}$ are independent, and
+
+\begin{equation*}
+    \hat{\beta}_{i\cdot} \sim N_{p}\big(\beta_{i\cdot}, V^{(i)}\big)
+\end{equation*}
+where $\hat{\beta}_{i\cdot}$ denotes the $i^{th}$ row of $\hat{\beta}$, $N_{p}$ denotes the $p$ dimensional multivariate normal distribution and $V^{(i)}$ is a known $p \times p$ covariance matrix. Now, if we would like to impose a "flash" prior on $\beta$, we could assume that each row of $\beta$ is generated independently as 
+\begin{equation*}
+    \beta_{i\cdot} \sim N_{p}\big(\boldsymbol{\ell}_{i}F^{T}, diag(\sigma^{2}_{i1}, \dots, \sigma^{2}_{ip})\big)
+\end{equation*}
+where each $\boldsymbol{\ell}_{i}$ is an n-vector of unknown "loadings", $F$ is an $p \times k$ matrix of unknown "factors", and $\sigma^{2}_{i1}, \dots, \sigma^{2}_{ip}$ are unknown variance parameters. Alternatively, if we would like to impoase a "mash" prior on $\beta$, we could assume that each row of $\beta$ is generated independently as 
+\begin{equation*}
+    \beta_{i\cdot} \sim \sum_{k = 1}^{K} \sum_{l = 1}^{L} N_{p}\big(\boldsymbol{0}, \omega_{l}U_{k}\big)
+\end{equation*}
+
+where each $\omega_{l}$ is a scaling factor and each $U_{k}$ is an unknown covariance matrix. Thus, the conceptual difference between mash and flash can be viewed (in part) as a difference in choice of prior for each row of $\beta$. Note that while mash can handle any (positive semi-definite) choice for each $V^{(i)}$, flash is currently constrained to only handle diagonal choices for each $V^{(i)}$. Thus, ``mishmashr`` only handles diagonal observation covariance matrices.
+
+## Flash Enhancements
+
+While the formulation of flash above is useful for comparing it to mash, for the remainder of this vignette we will return to the more familiar formulation of
+
+\begin{equation*}
+Y = LF^{T} + E^{(1)} + E^{(2)}
+\end{equation*}
+
+where $L$ is an $n \times k$ matrix of loadings, $F$ is a $p \times k$ matrix of factors, $E^{(1)}$ is an $n \times p$ matrix where each $e^{(1)}_{ij}$ is generated independently as $N(0, \sigma_{ij}^{2})$ where $\sigma_{ij}$ is unknown, and $E^{(2)}$ is an $n \times p$ matrix where each $e^{(2)}_{ij}$ is generated independently as $N(0, s_{ij}^{2})$ where $s_{ij}$ is known.
+
+### lfsr
+
+Currently, `flashier` implements lfsr calculations for $L$ and $F$, but contains no lfsr calculation for $LF^{T} + E^{(1)}$, which could be of interest. To obtain such values, `mishmashr` uses a two-step simulation process.
+
+(1) Sample $M$ times from $f(LF^{T}|Y)$.
+
+(2) For each sample $m$, sample once from $f(E^{(1)}|(LF^{T})^{(m)}, \sigma^{2}_{ij})$ and add it to $(LF^{T})^{(m)}$. 
+
+Step 1 is already implemented in flashier, but step 2 is not. To implement step 2, we consider the distribution of residual $(Y - (LF^{T})^{(m)})_{ij} = r_{ij}$ given $L$, $F$, and $\sigma^{2}_{ij}$. Then, we can write 
+\begin{align*}
+r_{ij} &\sim N(e^{(1)}_{ij}, s_{ij}^{2})\\
+e_{ij} & \sim N(0, \sigma_{ij}^{2}).
+\end{align*}
+
+It is a well known fact that 
+
+\begin{equation*}
+f(e^{(1)}_{ij} | r_{ij}) \sim N(\mu_{ij}, \gamma_{ij})
+\end{equation*}
+where $\mu_{ij} = \frac{\frac{1}{s_{ij}^{2}}r_{ij}}{\frac{1}{s_{ij}^{2}} + \frac{1}{\sigma_{ij}^{2}}}$ and $\gamma_{ij} = \frac{1}{\frac{1}{s_{ij}^{2}} + \frac{1}{\sigma_{ij}^{2}}}$. In practice, $\sigma_{ij}^{2}$ is not known and instead will be replaced with its MLE from fitting flash.
+
+### Expectation of E
+
+To derive $E[e^{(1)}_{ij}]$, assuming $\sigma^{2}_{ij}$ known, we simply note that
+
+\begin{align*}
+E[e_{ij}^{(1)}] &= E[E[e_{ij}^{(1)} | \boldsymbol{\ell}_{i}, \boldsymbol{f}_{j}]] \\
+&= E\Bigg[\frac{\frac{1}{s_{ij}^{2}}r_{ij}}{\frac{1}{s_{ij}^{2}} + \frac{1}{\sigma_{ij}^{2}}}\Bigg] \\
+&= \frac{\frac{1}{s_{ij}^{2}}E[r_{ij}]}{\frac{1}{s_{ij}^{2}} + \frac{1}{\sigma_{ij}^{2}}} \\
+&= \frac{\frac{1}{s_{ij}^{2}}(y_{ij} - E[\boldsymbol{\ell}_{i} \cdot \boldsymbol{f}_{j}])}{\frac{1}{s_{ij}^{2}} + \frac{1}{\sigma_{ij}^{2}}} \\
+\end{align*}
+which is easily computed, since `flashier` calculates $E[\boldsymbol{\ell}_{i} \cdot \boldsymbol{f}_{j}]$.
+
+### Mashy Flash
+
+The two enhancements above are implmented in `mishmashr::mashy_flash`, named because it gives a mash-like interface for fitting a flash model.
+
+First, we'll generate some data from a low-rank covariance structure.
+
+```{r, eval=F}
+# Generate 10 x 500 matrix with rank 3.
+n <- 10
+p <- 100
+k <- 3
+
+A <- matrix(
+  data = rnorm(n = n * k, sd = 2), nrow = n, ncol = k
+)
+cov <- A %*% t(A) / (n - 1)
+
+X <- t(MASS::mvrnorm(n = p, mu = rep(0, n), Sigma = cov))
+
+# N(0, 1) noise for each element of E1
+E1 <- matrix(rnorm(n * p, 0, 1), n, p)
+
+# N(0, 1) noise for each element of E2
+E2 <- matrix(rnorm(n * p, 0, 1), n, p)
+
+Y <- X + E1 + E2
+```
+
+Now, we can create a mash data object.
+
+```{r, eval=F}
+mash_data <- mashr::mash_set_data(Bhat = Y, Shat = 1)
+```
+
+Finally, we can pash this data into `mashy_flash`, which estimates a flash model using the mash data. Any other parameters which can be passed to `flashier::flash` can be passed to `mashy_flash`.
+
+```{r, eval=F}
+fl <- mishmashr::mashy_flash(
+  mash_data,
+  greedy.Kmax = 5, 
+  backfit = TRUE,
+  verbose = 0
+)
+```
+
+`mashy_flash` outputs a `flashier::flash` object, but with a few extra goodies. It contains an element `LF_E.lfsr`, which contains the lfsr of `LF^{T} + E`. It also contains an element `E.pm`, containing $E[E^{(1)} | Y]$. We've also implemented the function `get_flash_pm`, which returns $E[LF^{T} + E^{(1)} | Y]$ from a flash object.
+
+## Unified Interface
+
+In addition to the enhancements to flash models, `mishmashr` implements a unified interface, `mishmashr::mishmash` for fitting flash and mash models. `mishmash` simply takes a mash data object and two optional lists of parameters to `mashr::mash` and `flashier::flash`.
+
+```{r, eval=FALSE}
+Ulist = mashr::cov_canonical(mash_data)
+
+mv_models <- mishmashr::mishmash(
+  mash_data = mash_data,
+  mash_params = list(Ulist = Ulist, posterior_samples = 100),
+  flash_params = list(greedy.Kmax = 5, backfit = TRUE, verbose = 0)
+)
+```
+
+After fitting both mash and flash models, `mv_models` will have two elements,
+`flash` and `mash`, which contain each of the fit objects.
+
+## Session Info
+
+```{r session-info}
+sessionInfo()
+```
+

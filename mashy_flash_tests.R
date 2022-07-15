@@ -1,5 +1,4 @@
 # here, want to write testing utilities for functions in mashy flash
-source("./mashy_flash.R")
 source("./simulation.R")
 
 calculate_lfsr_calibration <- function(X_true, X_fitted, lfsr) {
@@ -53,6 +52,7 @@ Y <- X + matrix(rnorm(n * p, 0, 1), n, p)
 
 # set mash data
 mash_data <- mashr::mash_set_data(Y)
+fl <- flashier::flash(Y)
 fl <- mashy_flash(
   mash_data, backfit = TRUE, greedy.Kmax = 10, var.type = NULL
 )
@@ -72,7 +72,9 @@ distr_list <- list(
   )
 )
 
-S_mat <- matrix(data = 1, nrow = n, ncol = p)
+S_mat_2 <- matrix(data = 2, nrow = n, ncol = p)
+
+S_mat_1 <- matrix(data = 1, nrow = n, ncol = p)
 
 flash_sim_data <- generate_data_from_flash_model(
   n = 25,
@@ -82,11 +84,11 @@ flash_sim_data <- generate_data_from_flash_model(
   factor_distr_probs = c(1),
   loading_distr_list = distr_list,
   loading_distr_probs = c(1),
-  S_1 = S_mat,
-  S_2 = S_mat
+  S_1 = S_mat_1,
+  S_2 = S_mat_2
 )
 
-mash_data <- mashr::mash_set_data(Bhat = flash_sim_data$Y, Shat = S_mat)
+mash_data <- mashr::mash_set_data(Bhat = flash_sim_data$Y, Shat = S_mat_2)
 fl <- mashy_flash(
   mash_data, backfit = TRUE, greedy.Kmax = 10
 )
