@@ -23,7 +23,7 @@ flash_sample_fx <- function(flash, nsamp) {
 #'
 flash_get_E_pm <- function(fl, fit_E) {
 
-  if (!fit_E) {
+  if (!fit_E || flashier:::get.n.factors(fl) == 0) {
 
     return(
       matrix(data = 0, nrow = nrow(fl$flash.fit$Y), ncol = ncol(fl$flash.fit$Y))
