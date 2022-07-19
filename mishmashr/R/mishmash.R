@@ -23,7 +23,7 @@ flash_sample_fx <- function(flash, nsamp) {
 #'
 flash_get_E_pm <- function(fl, fit_E) {
 
-  if (!fit_E || flashier:::get.n.factors(fl) == 0) {
+  if (!fit_E || flashier:::get.n.factors(fl$flash.fit) == 0) {
 
     return(
       matrix(data = 0, nrow = nrow(fl$flash.fit$Y), ncol = ncol(fl$flash.fit$Y))
@@ -230,7 +230,7 @@ mashy_flash <- function(mash_data, lfsr_nsamp = 1000, ...) {
 #'
 flash_get_pm <- function(fl) {
 
-  if (flashier:::get.n.factors(fl) == 0) {
+  if (flashier:::get.n.factors(fl$flash.fit) == 0) {
     warning("Flash object does not have any factors.")
     return(matrix(data = 0, nrow = nrow(fl$flash.fit$Y), ncol = ncol(fl$flash.fit$Y)))
   }
