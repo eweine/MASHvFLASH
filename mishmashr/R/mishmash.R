@@ -32,7 +32,7 @@ flash_get_E_pm <- function(fl, fit_E) {
   } else {
 
     resid <- fl$flash.fit$Y - fl$L.pm %*% t(fl$F.pm)
-    E_pm <- resid * (1 / fl$flash.fit$given.S2)
+    E_pm <- resid * (1 / fl$flash.fit$given.S2) / (1 / fl$flash.fit$given.S2 + fl$flash.fit$tau)
     return(E_pm)
 
   }
@@ -81,7 +81,7 @@ flash_lfsr_LF_E <- function(fl, fit_E, verbose, nsamp) {
       }
 
       resid <- fl$flash.fit$Y - fx_samp[[i]]
-      E_mean_mat <- resid * (1 / fl$flash.fit$given.S2)
+      E_mean_mat <- resid * (1 / fl$flash.fit$given.S2) / (1 / fl$flash.fit$given.S2 + fl$flash.fit$tau)
       E_sd_mat <- sqrt(1 / (1 / fl$flash.fit$given.S2 + fl$flash.fit$tau))
       E_samp <- matrix(
         data = rnorm(
