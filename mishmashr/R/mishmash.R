@@ -232,7 +232,7 @@ flash_get_pm <- function(fl) {
 
   if (flashier:::get.n.factors(fl) == 0) {
     warning("Flash object does not have any factors.")
-    return(matrix(data = 0, nrow = nrow(fl$Y), ncol = ncol(fl$Y)))
+    return(matrix(data = 0, nrow = nrow(fl$flash.fit$Y), ncol = ncol(fl$flash.fit$Y)))
   }
 
   if(!("E.pm" %in% names(fl))) {
