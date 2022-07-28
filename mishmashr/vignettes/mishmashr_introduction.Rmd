@@ -128,23 +128,6 @@ fl <- mishmashr::mashy_flash(
 
 `mashy_flash` outputs a `flashier::flash` object, but with a few extra goodies. It contains an element `LF_E.lfsr`, which contains the lfsr of `LF^{T} + E`. It also contains an element `E.pm`, containing $E[E^{(1)} | Y]$. We've also implemented the function `get_flash_pm`, which returns $E[LF^{T} + E^{(1)} | Y]$ from a flash object.
 
-## Unified Interface
-
-In addition to the enhancements to flash models, `mishmashr` implements a unified interface, `mishmashr::mishmash` for fitting flash and mash models. `mishmash` simply takes a mash data object and two optional lists of parameters to `mashr::mash` and `flashier::flash`.
-
-```{r, eval=FALSE}
-Ulist = mashr::cov_canonical(mash_data)
-
-mv_models <- mishmashr::mishmash(
-  mash_data = mash_data,
-  mash_params = list(Ulist = Ulist, posterior_samples = 100),
-  flash_params = list(greedy.Kmax = 5, backfit = TRUE, verbose = 0)
-)
-```
-
-After fitting both mash and flash models, `mv_models` will have two elements,
-`flash` and `mash`, which contain each of the fit objects.
-
 ## Session Info
 
 ```{r session-info}

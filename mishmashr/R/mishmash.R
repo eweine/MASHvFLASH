@@ -261,7 +261,6 @@ flash_get_pm <- function(fl) {
 #'   \item flash - a flash object (what is returned by \code{flashier::flash})
 #'   \item mash - a list of mash outputs (what is returned by \code{mashr::mash})
 #' }
-#' @export
 #'
 #' @examples
 #'

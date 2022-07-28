@@ -2,4 +2,3 @@
 
 export(flash_get_pm)
 export(mashy_flash)
-export(mishmash)
